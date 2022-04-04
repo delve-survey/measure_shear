@@ -10,8 +10,8 @@ from ngmix import ObsList, MultiBandObsList
 from ngmix.gexceptions import GMixRangeError
 
 from ngmix.medsreaders import MultiBandNGMixMEDS, NGMixMEDS
-from .metacal import MetacalFitter
-from .ngmix_compat import NGMIX_V2
+from metacal import MetacalFitter
+from ngmix_compat import NGMIX_V2
 from eastlake.step import Step
 from eastlake.utils import safe_mkdir
 
