@@ -281,6 +281,7 @@ class MetacalFitter(FitterBase):
 
     def _get_metacal_dtype(self, npars, nband):
         dt = [
+            ('id', 'i8'),
             ('x', 'f8'),
             ('y', 'f8'),
             ('mcal_flags', 'i8'),
@@ -332,6 +333,7 @@ class MetacalFitter(FitterBase):
         data0 = data[0]
         data0['y'] = mbobs[0][0].meta['orig_row']
         data0['x'] = mbobs[0][0].meta['orig_col']
+        data0['id'] = mbobs[0][0].meta['id']
         data0['mcal_flags'] = 0
 
         for mtype in METACAL_TYPES:
