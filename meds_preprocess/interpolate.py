@@ -152,6 +152,7 @@ def interpolate_image_at_mask(
 
     nbad = bad_msk.sum()
     bm_frac = nbad/npix
+    
     if bm_frac <= maxfrac and nbad < npix:
         interp_image = image.copy()
 
@@ -202,6 +203,7 @@ def interpolate_image_at_mask(
         good_pix = np.array(good_yx).T
         bad_pix = np.array(bad_yx).T
         good_im = interp_image[good_yx[0], good_yx[1]]
+        
         img_interp = CloughTocher2DInterpolator(
             good_pix,
             good_im,
