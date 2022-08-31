@@ -7,7 +7,6 @@ from ngmix.medsreaders import NGMixMEDS, MultiBandNGMixMEDS
 from meds_preprocess.interpolate import interpolate_image_at_mask
 NGMIX_V1=False
 
-from interpolate import interpolate_image_at_mask
 import galsim
 
 def _strip_coadd(mbobs, mcal_config):
