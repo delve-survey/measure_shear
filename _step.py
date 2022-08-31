@@ -6,12 +6,13 @@ import esutil as eu
 import fitsio
 from ngmix import ObsList, MultiBandObsList
 from ngmix.gexceptions import GMixRangeError
+import logging
 
 from ngmix.medsreaders import MultiBandNGMixMEDS, NGMixMEDS
 from metacal import MetacalFitter
 from ngmix_compat_metacal import NGMIX_V2
-from eastlake.step import Step
-from eastlake.utils import safe_mkdir
+#from eastlake.step import Step
+#from eastlake.utils import safe_mkdir
 import yaml
 import argparse
 from run_utils import _run_mcal_one_chunk
@@ -69,6 +70,7 @@ def _run_metacal(meds_files, seed, mcal_config):
 
     return output
 
+'''
 class NewishMetcalRunner(Step):
     """Run a newer metacal.
 
@@ -141,3 +143,4 @@ class NewishMetcalRunner(Step):
             stash.set_filepaths("newish_metacal_output", fname, tilename)
 
         return 0, stash
+'''
