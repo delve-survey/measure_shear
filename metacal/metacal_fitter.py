@@ -285,6 +285,7 @@ class MetacalFitter(FitterBase):
             ('x', 'f8'),
             ('y', 'f8'),
             ('mcal_flags', 'i8'),
+            ('good_frac', 'f8'),
         ]
         for mtype in METACAL_TYPES:
             n = Namer(front='mcal', back=mtype)
@@ -335,6 +336,9 @@ class MetacalFitter(FitterBase):
         data0['x'] = mbobs[0][0].meta['orig_col']
         data0['id'] = mbobs[0][0].meta['id']
         data0['mcal_flags'] = 0
+        
+        #Create entry now but we will only fill it much later on
+        data0['good_frac'] = 0
 
         for mtype in METACAL_TYPES:
             n = Namer(front='mcal', back=mtype)
