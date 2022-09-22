@@ -62,27 +62,34 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
             
             o = preprocess._strip_coadd(o, mcal_config) #Remove coadd since it isnt used in fitting
             o = preprocess._strip_zero_flux(o, mcal_config) #Remove any obs with zero flux
+            o = preprocess._add_zeroweights_mask(o, mcal_config) #Add mask from weights==0 condition
             
             #Keep only Nmax exps per band
             if mcal_config['custom']['Nexp_max'] > 0: 
                 o = preprocess._strip_Nexposures(o, rng, mcal_config) 
                 
-            #Remove obs with bad pixs
+                
+            #Remove obs with too many bad pixs
             if mcal_config['custom']['maxbadfrac'] > 0: 
                 o = preprocess._strip_10percent_masked(o, mcal_config)
+                
                 
             #gauss-weighted fraction of good pixs
             if mcal_config['custom']['goodfrac']: 
                 o = preprocess._get_masked_frac(o, mcal_config) 
                 
+                
             #Add 180deg Symmetry of bmask
             if mcal_config['custom']['symmetrize_mask']: 
                 o = preprocess._symmetrize_mask(o, mcal_config) 
-                
+            
+            
             #Interpolate empty pixels
             if mcal_config['custom']['interp_bad_pixels']: 
-                o = preprocess._fill_empty_pix(o, rng, mcal_config) 
+                o = preprocess._fill_empty_pix(o, rng, mcal_config)
             
+            
+            o = preprocess._set_zero_weights(o,  mcal_config) #Set all masked pix to have wgt=0, include mask symmetry
             o = preprocess._apply_pixel_scale(o, mcal_config) #Needed to convert from surface brightness to flux
 
             skip_me = False
