@@ -90,7 +90,6 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
             
             
             o = preprocess._set_zero_weights(o,  mcal_config) #Set all masked pix to have wgt=0, include mask symmetry
-            o = preprocess._apply_pixel_scale(o, mcal_config) #Needed to convert from surface brightness to flux
 
             skip_me = False
             for ol in o:
