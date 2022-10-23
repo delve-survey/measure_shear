@@ -9,6 +9,8 @@ NGMIX_V1=False
 
 import galsim
 
+BMASK_WGT = 2**20 #value used to set weight==0 mask bit
+
 def _strip_coadd(mbobs, mcal_config):
     _mbobs = MultiBandObsList()
     _mbobs.update_meta_data(mbobs.meta)
@@ -48,27 +50,6 @@ def _apply_pixel_scale(mbobs, mcal_config):
             
     return mbobs
 
-def _strip_10percent_masked(mbobs, mcal_config):
-    _mbobs = MultiBandObsList()
-    _mbobs.update_meta_data(mbobs.meta)
-    
-    #Loop over different band observations (r, i, z)
-    for ol in mbobs:
-        _ol = ObsList()
-        _ol.update_meta_data(ol.meta)
-        
-        #Loop over different exposures/cutouts in each band
-        for i in range(len(ol)):
-            
-            msk = ol[i].bmask.astype(bool) #Mask where TRUE means bad pixel
-            
-            if np.average(msk) >= mcal_config['custom']['maxbadfrac']:
-                continue
-            
-            _ol.append(ol[i])
-        _mbobs.append(_ol)
-    return _mbobs
-
 def _strip_Nexposures(mbobs, rng, mcal_config):
     
     _mbobs = MultiBandObsList()
@@ -92,7 +73,47 @@ def _strip_Nexposures(mbobs, rng, mcal_config):
         _mbobs.append(_ol)
     return _mbobs
     
+def _add_zeroweights_mask(mbobs, mcal_config):
     
+    _mbobs = MultiBandObsList()
+    _mbobs.update_meta_data(mbobs.meta)
+    
+    #Loop over different band observations (r, i, z)
+    for ol in mbobs:
+        _ol = ObsList()
+        _ol.update_meta_data(ol.meta)
+        
+        #Loop over different exposures/cutouts in each band
+        for i in range(len(ol)):
+            
+            weight_mask = np.where(ol[i].weight <= 0, BMASK_WGT, 0)
+            ol[i].bmask = np.bitwise_or(ol[i].bmask, weight_mask)
+            
+            _ol.append(ol[i])
+        _mbobs.append(_ol)
+    return _mbobs
+
+def _strip_10percent_masked(mbobs, mcal_config):
+    _mbobs = MultiBandObsList()
+    _mbobs.update_meta_data(mbobs.meta)
+    
+    #Loop over different band observations (r, i, z)
+    for ol in mbobs:
+        _ol = ObsList()
+        _ol.update_meta_data(ol.meta)
+        
+        #Loop over different exposures/cutouts in each band
+        for i in range(len(ol)):
+            
+            msk = ol[i].bmask.astype(bool) #Mask where TRUE means bad pixel
+            
+            if np.average(msk) >= mcal_config['custom']['maxbadfrac']:
+                continue
+            
+            _ol.append(ol[i])
+        _mbobs.append(_ol)
+    return _mbobs
+
 def _get_masked_frac(mbobs, mcal_config):
     
     _mbobs = MultiBandObsList()
@@ -109,7 +130,7 @@ def _get_masked_frac(mbobs, mcal_config):
         for i in range(len(ol)):
             
             msk = ol[i].bmask.astype(bool) #Mask where TRUE means bad pixel
-            wgt = np.median(ol[i].weight[ol[i].weight != 0]) #Median weight used to populate noise in empty pix
+            wgt = np.median(ol[i].weight[np.invert(msk)]) #Median weight used to populate noise in empty pix
             
             #get wcs of this observations
             wcs = ol[i].jacobian.get_galsim_wcs()
@@ -125,8 +146,6 @@ def _get_masked_frac(mbobs, mcal_config):
             ol[i].meta['good_frac'] = good_frac
             ol[i].meta['weight']    = wgt
             
-#             print("goodfrac", good_frac, wgt)
-
             _ol.append(ol[i])
         _mbobs.append(_ol)
     return _mbobs
@@ -144,16 +163,30 @@ def _symmetrize_mask(mbobs, mcal_config):
         #Loop over different exposures/cutouts in each band
         for i in range(len(ol)):
             
-            msk = ol[i].bmask.astype(bool) #Mask where TRUE means bad pixel
-                
-#             print("symm1", msk.sum(), np.sum(ol[i].bmask))
-            #Rotate because Metacal needs this
-            msk |= np.rot90(msk, k = 1)
+            #Rotate, merge mask for 180deg symmetry and write back to observation
+            ol[i].bmask = np.bitwise_or(ol[i].bmask, np.rot90(ol[i].bmask))
             
-            #Write rotated mask back to observation
-            ol[i].bmask = msk.astype(np.int32)
-            
-#             print("symm2", msk.sum(), np.sum(ol[i].bmask))
+            _ol.append(ol[i])
+        _mbobs.append(_ol)
+    return _mbobs
+
+def _set_zero_weights(mbobs, mcal_config):
+    
+    _mbobs = MultiBandObsList()
+    _mbobs.update_meta_data(mbobs.meta)
+    
+    #Loop over different band observations (r, i, z)
+    for ol in mbobs:
+        _ol = ObsList()
+        _ol.update_meta_data(ol.meta)
+        
+        #Loop over different exposures/cutouts in each band
+        for i in range(len(ol)):
+                        
+            #Set weights=0 whenever bmask is set
+            wgt = ol[i].weight.copy()
+            wgt[ol[i].bmask != 0] = 0.
+            ol[i].weight = wgt
             
             _ol.append(ol[i])
         _mbobs.append(_ol)
@@ -172,7 +205,7 @@ def _fill_empty_pix(mbobs, rng, mcal_config):
         for i in range(len(ol)):
             
             msk = ol[i].bmask.astype(bool) #Mask where TRUE means bad pixel
-            wgt = np.median(ol[i].weight[ol[i].weight != 0]) #Median weight used to populate noise in empty pix
+            wgt = np.median(ol[i].weight[np.invert(msk)]) #Median weight (of only good pix) used to populate noise in empty pix
             
             #Observation doesn't have noise image, and so add noise image in.
             #Just random gaussian noise image using weights
