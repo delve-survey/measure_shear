@@ -120,7 +120,42 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
 
             try:
                 mcal.go([o])
-                res = mcal.result
+                
+                #Read metacal output, and get the dtype of the field.
+                #This step is done so we can add custom quantities, not computed in mcal
+                #to the final output of the metacal files
+                tmp = mcal.result
+                dt = o.get_cat().dtype.fields
+                dt = [(i, dt[i][0]) for i in dt]
+                
+                #Add custom quantities for focal plane coords.
+                #Has shape (N_bands, N_cutouts)
+                dt += [('expnum', '<U10', (len(o), mcal_config['custom']['Nexp_max']))]
+                dt += [('ccdnum', '<U4',  (len(o), mcal_config['custom']['Nexp_max']))]
+                dt += [('x_exp',  '>f8',  (len(o), mcal_config['custom']['Nexp_max']))]
+                dt += [('y_exp',  '>f8',  (len(o), mcal_config['custom']['Nexp_max']))]
+                
+                res = np.zeros(len(tmp), dt = dt)
+    
+                for i in tmp.dtype.names:
+                    res[i] = tmp[i]
+                
+                #Set default values for these. Entries take these values
+                #for an object that doesn't have all the cutouts we need
+                res['expnum'] = -9999
+                res['ccdnum'] = -9999
+                res['x_exp']  = -9999
+                res['y_exp']  = -9999
+                
+                for i_band in range(len(o)):
+                    for i_cutout in range(len(o[i_band])):
+                        file_path = o[i_band][i_cutout].meta['file_path'] 
+                        res['expnum'][i_band, i_cutout] = file_path.split('_')[0] #Store expnum as string, eg. "D00605764"
+                        res['ccdnum'][i_band, i_cutout] = file_path.split('_')[2] #Store ccdnum as string, eg. "c42"
+                        res['x_exp'][i_band, i_cutout]  = o[i_band][i_cutout].meta['orig_col']
+                        res['y_exp'][i_band, i_cutout]  = o[i_band][i_cutout].meta['orig_row']                  
+                        
+                               
             except GMixRangeError as e:
                 logger.debug(" metacal error: %s", str(e))
                 res = None
