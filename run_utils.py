@@ -125,7 +125,7 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
                 #This step is done so we can add custom quantities, not computed in mcal
                 #to the final output of the metacal files
                 tmp = mcal.result
-                dt = o.get_cat().dtype.fields
+                dt = tmp.dtype.fields
                 dt = [(i, dt[i][0]) for i in dt]
                 
                 #Add custom quantities for focal plane coords.
