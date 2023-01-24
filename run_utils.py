@@ -102,8 +102,8 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
             o.meta['id'] = ind
             o[0].meta['Tsky'] = 1
             o[0].meta['magzp_ref']   = MAGZP_REF
-            o[0][0].meta['orig_col'] = cat['orig_col'][ind, 0]
-            o[0][0].meta['orig_row'] = cat['orig_row'][ind, 0]
+#             o[0][0].meta['orig_col'] = cat['orig_col'][ind, 0]
+#             o[0][0].meta['orig_row'] = cat['orig_row'][ind, 0]
 
             if mcal_config['custom']['goodfrac']:
                 #put all the good_fraction numbers into one list
@@ -125,36 +125,40 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
                 #This step is done so we can add custom quantities, not computed in mcal
                 #to the final output of the metacal files
                 tmp = mcal.result
-                dt = tmp.dtype.fields
-                dt = [(i, dt[i][0]) for i in dt]
                 
-                #Add custom quantities for focal plane coords.
-                #Has shape (N_bands, N_cutouts)
-                dt += [('expnum', '<U10', (len(o), mcal_config['custom']['Nexp_max']))]
-                dt += [('ccdnum', '<U4',  (len(o), mcal_config['custom']['Nexp_max']))]
-                dt += [('x_exp',  '>f8',  (len(o), mcal_config['custom']['Nexp_max']))]
-                dt += [('y_exp',  '>f8',  (len(o), mcal_config['custom']['Nexp_max']))]
+                if tmp is not None:
+                    dt = tmp.dtype.fields
+                    dt = [(i, dt[i][0]) for i in dt]
+
+                    #Add custom quantities for focal plane coords.
+                    #Has shape (N_bands, N_cutouts)
+                    dt += [('expnum', '>i8', (len(o), mcal_config['custom']['Nexp_max']))]
+                    dt += [('ccdnum', '>i8', (len(o), mcal_config['custom']['Nexp_max']))]
+                    dt += [('x_exp',  '>f8', (len(o), mcal_config['custom']['Nexp_max']))]
+                    dt += [('y_exp',  '>f8', (len(o), mcal_config['custom']['Nexp_max']))]
+
+                    res = np.zeros(len(tmp), dtype = dt)
+
+                    for i in tmp.dtype.names:
+                        res[i] = tmp[i]
+
+                    #Set default values for these. Entries take these values
+                    #for an object that doesn't have all the cutouts we need
+                    res['expnum'] = -9999
+                    res['ccdnum'] = -9999
+                    res['x_exp']  = -9999
+                    res['y_exp']  = -9999
+
+                    for i_band in range(len(o)):
+                        for i_cutout in range(len(o[i_band])):
+                            file_path = o[i_band][i_cutout].meta['file_path']
+                            res['expnum'][0, i_band, i_cutout] = file_path.split('_')[0][1:] #Store expnum as "D00605764" -> 605764
+                            res['ccdnum'][0, i_band, i_cutout] = file_path.split('_')[2][1:] #Store ccdnum as "c42" -> 42
+                            res['x_exp'][0, i_band, i_cutout]  = o[i_band][i_cutout].meta['orig_col']
+                            res['y_exp'][0, i_band, i_cutout]  = o[i_band][i_cutout].meta['orig_row']                  
                 
-                res = np.zeros(len(tmp), dt = dt)
-    
-                for i in tmp.dtype.names:
-                    res[i] = tmp[i]
-                
-                #Set default values for these. Entries take these values
-                #for an object that doesn't have all the cutouts we need
-                res['expnum'] = -9999
-                res['ccdnum'] = -9999
-                res['x_exp']  = -9999
-                res['y_exp']  = -9999
-                
-                for i_band in range(len(o)):
-                    for i_cutout in range(len(o[i_band])):
-                        file_path = o[i_band][i_cutout].meta['file_path'] 
-                        res['expnum'][i_band, i_cutout] = file_path.split('_')[0] #Store expnum as string, eg. "D00605764"
-                        res['ccdnum'][i_band, i_cutout] = file_path.split('_')[2] #Store ccdnum as string, eg. "c42"
-                        res['x_exp'][i_band, i_cutout]  = o[i_band][i_cutout].meta['orig_col']
-                        res['y_exp'][i_band, i_cutout]  = o[i_band][i_cutout].meta['orig_row']                  
-                        
+                elif tmp is None:
+                    res = tmp
                                
             except GMixRangeError as e:
                 logger.debug(" metacal error: %s", str(e))
