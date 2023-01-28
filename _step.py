@@ -11,8 +11,6 @@ import logging
 from ngmix.medsreaders import MultiBandNGMixMEDS, NGMixMEDS
 from metacal import MetacalFitter
 from ngmix_compat_metacal import NGMIX_V2
-#from eastlake.step import Step
-#from eastlake.utils import safe_mkdir
 import yaml
 import argparse
 from run_utils import _run_mcal_one_chunk
@@ -71,6 +69,14 @@ def _run_metacal(meds_files, seed, mcal_config):
     return output
 
 '''
+
+#Dhayaa: Commenting out parts of code that we don't really use
+         Keeping here for posterity (maybe just remove though)
+
+from eastlake.step import Step
+from eastlake.utils import safe_mkdir
+
+
 class NewishMetcalRunner(Step):
     """Run a newer metacal.
 
