@@ -58,7 +58,7 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
         cat = mfiles[0].get_cat()
 
         for ind in range(start, end):
-            o = mbmeds.get_mbobs(ind)
+            o = mbmeds.get_mbobs(ind, weight_type='uberseg')
             
             o = preprocess._strip_coadd(o, mcal_config) #Remove coadd since it isnt used in fitting
             o = preprocess._strip_zero_flux(o, mcal_config) #Remove any obs with zero flux
@@ -141,6 +141,12 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
 
                     for i in tmp.dtype.names:
                         res[i] = tmp[i]
+                        
+                    #Hacking to get coadd position in results
+                    #(Mcal would just write first cutout position here by default,
+                    #but we stripped coadd so it isn't first cutout)
+                    res['x'] = cat['orig_col'][ind, 0]
+                    res['y'] = cat['orig_row'][ind, 0]
 
                     #Set default values for these. Entries take these values
                     #for an object that doesn't have all the cutouts we need
