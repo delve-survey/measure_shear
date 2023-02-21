@@ -61,10 +61,10 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
             
 #             print("IN GAL", ind)
             
-            #First load mbobs as usual. This is the one passed to metacal
+            #Load mbobs for fiducial run
             o = mbmeds.get_mbobs(ind, weight_type='weight')
             
-            #Use wcs to make gaussian pixel weights for bad mask fraction
+            #Use wcs of coadd to make gaussian pixel weights for bad mask fraction
             if len(o[0]) == 0: 
                 continue
             else:
@@ -72,28 +72,29 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
              
             o = preprocess._strip_coadd(o, mcal_config) #Remove coadd since it isnt used in fitting
             o = preprocess._strip_zero_flux(o, mcal_config) #Remove any obs with zero flux
-            o = preprocess._add_zeroweights_mask(o, mcal_config) #Add mask from weights==0 condition
             
-            #Check if we have bare minimum cutouts needed to measure shapes
+            #Check if we are missing cutouts in any band (we usually will for DECADE data)
             skip_me = False
             for ol in o:
-                if len(ol) == 0:
-                    logger.debug(' not all bands have images - skipping!')
-                    skip_me = True
-            if skip_me:
-#                 print("SKIPPING", ind)
-                continue
-                
+                if len(ol) == 0: skip_me = True
+            if skip_me: continue
+            
+            #Now load uberseg version and add uberseg image 
+            #to the observation as a property
+            o_tmp = mbmeds.get_mbobs(ind, weight_type='uberseg')
+            o     = preprocess._add_uberseg(o, o_tmp, mcal_config)
+            
             Ncutouts_per_band = [len(i) for i in o]
             
             #Keep only Nmax exps per band
             if mcal_config['custom']['Nexp_max'] > 0: 
                 o = preprocess._strip_Nexposures(o, np.random.RandomState(seed=seed), mcal_config)
              
-            #Add 180deg Symmetry of bmask
+            #Add 180deg Symmetry of weights (NOT UBERSEG)
             mcal_config['custom']['symmetrize_weights'] = mcal_config['custom']['symmetrize_mask'] #Monkeypatch for now. FIX LATER
             if mcal_config['custom']['symmetrize_weights']: 
                 o = preprocess._symmetrize_weights(o, mcal_config)             
+            
             
             #gauss-weighted fraction of bad pixels
             o = preprocess._get_masked_frac(o, mcal_config, coadd_wcs_rband)
@@ -101,43 +102,12 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
             badfrac = o.meta['badfrac']
             
             
-            ##########################################################################
-            
-            #NOW we load uberseg version to just get the weights plane
-            o_tmp = mbmeds.get_mbobs(ind, weight_type='uberseg')
-            
-            #Same procedure as before to remove same cutout
-            o_tmp = preprocess._strip_coadd(o_tmp, mcal_config) 
-            o_tmp = preprocess._strip_zero_flux(o_tmp, mcal_config)
-            
-            #Check if we have bare minimum cutouts needed in uberseg
-            #This is a stricter check than previous because uberseg
-            #seems to remove cutouts
-            skip_me = False
-            for ol in o_tmp:
-                if len(ol) == 0:
-                    logger.debug(' not all bands have images - skipping!')
-                    skip_me = True
-            if skip_me:
-#                 print("SKIPPING", ind)
-                continue
-            
-            #Also make sure we subsample cutouts in SAME random way
-            if mcal_config['custom']['Nexp_max'] > 0: 
-                o_tmp = preprocess._strip_Nexposures(o_tmp, np.random.RandomState(seed=seed), mcal_config)
-            
-            
-            ##########################################################################
-            
-            #Check that image in uberseg cutouts is same as final cutouts
-            preprocess._assert_image_is_same(o, o_tmp, mcal_config)
-            
             #Fill empty pixels of the cutout using interpolation + a noise image
             if mcal_config['custom']['interp_bad_pixels']: 
-                o = preprocess._fill_empty_pix(o, rng, mcal_config)
+                o = preprocess._fill_empty_pix(o, rng, mcal_config) 
                 
             #finally take uberseg weight map and apply it to cutout
-            o = preprocess._apply_uberseg(o, o_tmp, mcal_config) 
+            o = preprocess._apply_uberseg(o, mcal_config) 
             
             
             ##########################################################################

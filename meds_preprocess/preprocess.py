@@ -222,36 +222,66 @@ def _set_zero_weights(mbobs, mcal_config):
         _mbobs.append(_ol)
     return _mbobs
 
-def _apply_uberseg(mbobs, mbobs_with_uberseg, mcal_config):
+def _add_uberseg(mbobs, mbobs_with_uberseg, mcal_config):
     
     _mbobs = MultiBandObsList()
     _mbobs.update_meta_data(mbobs.meta)
     
-#     print(mbobs1, mbobs2)
+    #First build a dictionary that tells you image name
+    #to the index in the multiband obs list for the corresponding cutout
+    
+    locator = {}
+    for i, ol in enumerate(mbobs_with_uberseg):
+        for j, o in enumerate(ol):
+#             print(j, ol, ol.meta)
+            locator[o.meta['file_path']] = (i, j)
+    
     #Loop over different band observations (r, i, z)
-    for ol, ol_with_uberseg in zip(mbobs, mbobs_with_uberseg):
+    for ol in mbobs:
         _ol = ObsList()
         _ol.update_meta_data(ol.meta)
         
         #Loop over different exposures/cutouts in each band
         for i in range(len(ol)):
             
-            #apply uberseg weights to the original weight
-            ol[i].weight = np.where(ol_with_uberseg[i].weight == 0, 0, ol[i].weight)
+            #If uberseg version doesn't exist then skip this observation
+            #this means uberseg weight mask is so large that the image has no usable pixels
+            if ol[i].meta['file_path'] not in locator: continue
+                
+            inds = locator[ol[i].meta['file_path']]
+            
+            #add uberseg weights image to observation
+            ol[i].uberseg = mbobs_with_uberseg[inds[0]][inds[1]].weight
 
             _ol.append(ol[i])
         _mbobs.append(_ol)
     return _mbobs
 
-
-def _assert_image_is_same(mbobs1, mbobs2, mcal_config):
+def _apply_uberseg(mbobs, mcal_config):
     
-    for m1, m2 in zip(mbobs1, mbobs2):
-        for o1, o2 in zip(m1, m2):
+    _mbobs = MultiBandObsList()
+    _mbobs.update_meta_data(mbobs.meta)
+    
+    #Loop over different band observations (r, i, z)
+    for ol in mbobs:
+        _ol = ObsList()
+        _ol.update_meta_data(ol.meta)
+        
+        #Loop over different exposures/cutouts in each band
+        for i in range(len(ol)):
             
-            assert np.all(np.isclose(o1.image, o2.image, atol = 1e-10))
+            #apply uberseg weights to fiducial weights
+            #Ensures that all ubserseg pixels are masked out here
+            new_weights  = np.where(ol[i].uberseg == 0, 0, ol[i].weight)
             
-    return None
+            if np.sum(new_weights != 0) == 0: continue #Check if entire image is masked. Skip if yes.
+            
+            ol[i].weight = new_weights
+
+            _ol.append(ol[i])
+        _mbobs.append(_ol)
+    return _mbobs
+
     
 def _fill_empty_pix(mbobs, rng, mcal_config):
     _mbobs = MultiBandObsList()
