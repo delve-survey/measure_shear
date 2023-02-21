@@ -191,10 +191,11 @@ def _symmetrize_weights(mbobs, mcal_config):
         #Loop over different exposures/cutouts in each band
         for i in range(len(ol)):
             
-            #Rotate, merge mask for 180deg symmetry and write back to observation
-            ol[i].weight = np.where((ol[i].weight <= 0) | (np.rot90(ol[i].weight) <= 0), 0, ol[i].weight)
-
-            ol[i].bmask = ol[i].weight == 0
+            new_weights = np.where((ol[i].weight <= 0) | (np.rot90(ol[i].weight) <= 0), 0, ol[i].weight)
+            
+            if np.sum(new_weights != 0) == 0: continue #Check if entire image is masked. Skip if yes.
+                
+            ol[i].weight = new_weights
             
             _ol.append(ol[i])
         _mbobs.append(_ol)
