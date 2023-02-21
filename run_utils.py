@@ -58,62 +58,95 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
         cat = mfiles[0].get_cat()
 
         for ind in range(start, end):
-            o = mbmeds.get_mbobs(ind, weight_type='uberseg')
             
+#             print("IN GAL", ind)
+            
+            #First load mbobs as usual. This is the one passed to metacal
+            o = mbmeds.get_mbobs(ind, weight_type='weight')
+            
+            #Use wcs to make gaussian pixel weights for bad mask fraction
+            if len(o[0]) == 0: 
+                continue
+            else:
+                coadd_wcs_rband = o[0][0].jacobian.get_galsim_wcs()
+             
             o = preprocess._strip_coadd(o, mcal_config) #Remove coadd since it isnt used in fitting
             o = preprocess._strip_zero_flux(o, mcal_config) #Remove any obs with zero flux
             o = preprocess._add_zeroweights_mask(o, mcal_config) #Add mask from weights==0 condition
             
-            #Keep only Nmax exps per band
-            if mcal_config['custom']['Nexp_max'] > 0: 
-                o = preprocess._strip_Nexposures(o, rng, mcal_config) 
-                
-                
-            #Remove obs with too many bad pixs
-            if mcal_config['custom']['maxbadfrac'] > 0: 
-                o = preprocess._strip_10percent_masked(o, mcal_config)
-                
-                
-            #gauss-weighted fraction of good pixs
-            if mcal_config['custom']['goodfrac']: 
-                o = preprocess._get_masked_frac(o, mcal_config) 
-                
-                
-            #Add 180deg Symmetry of bmask
-            if mcal_config['custom']['symmetrize_mask']: 
-                o = preprocess._symmetrize_mask(o, mcal_config) 
-            
-            
-            #Interpolate empty pixels
-            if mcal_config['custom']['interp_bad_pixels']: 
-                o = preprocess._fill_empty_pix(o, rng, mcal_config)
-            
-            
-            o = preprocess._set_zero_weights(o,  mcal_config) #Set all masked pix to have wgt=0, include mask symmetry
-
+            #Check if we have bare minimum cutouts needed to measure shapes
             skip_me = False
             for ol in o:
                 if len(ol) == 0:
                     logger.debug(' not all bands have images - skipping!')
                     skip_me = True
             if skip_me:
+#                 print("SKIPPING", ind)
                 continue
-
+                
+            Ncutouts_per_band = [len(i) for i in o]
+            
+            #Keep only Nmax exps per band
+            if mcal_config['custom']['Nexp_max'] > 0: 
+                o = preprocess._strip_Nexposures(o, np.random.RandomState(seed=seed), mcal_config)
+             
+            #Add 180deg Symmetry of bmask
+            mcal_config['custom']['symmetrize_weights'] = mcal_config['custom']['symmetrize_mask'] #Monkeypatch for now. FIX LATER
+            if mcal_config['custom']['symmetrize_weights']: 
+                o = preprocess._symmetrize_weights(o, mcal_config)             
+            
+            #gauss-weighted fraction of bad pixels
+            o = preprocess._get_masked_frac(o, mcal_config, coadd_wcs_rband)
+            
+            badfrac = o.meta['badfrac']
+            
+            
+            ##########################################################################
+            
+            #NOW we load uberseg version to just get the weights plane
+            o_tmp = mbmeds.get_mbobs(ind, weight_type='uberseg')
+            
+            #Same procedure as before to remove same cutout
+            o_tmp = preprocess._strip_coadd(o_tmp, mcal_config) 
+            o_tmp = preprocess._strip_zero_flux(o_tmp, mcal_config)
+            
+            #Check if we have bare minimum cutouts needed in uberseg
+            #This is a stricter check than previous because uberseg
+            #seems to remove cutouts
+            skip_me = False
+            for ol in o_tmp:
+                if len(ol) == 0:
+                    logger.debug(' not all bands have images - skipping!')
+                    skip_me = True
+            if skip_me:
+#                 print("SKIPPING", ind)
+                continue
+            
+            #Also make sure we subsample cutouts in SAME random way
+            if mcal_config['custom']['Nexp_max'] > 0: 
+                o_tmp = preprocess._strip_Nexposures(o_tmp, np.random.RandomState(seed=seed), mcal_config)
+            
+            
+            ##########################################################################
+            
+            #Check that image in uberseg cutouts is same as final cutouts
+            preprocess._assert_image_is_same(o, o_tmp, mcal_config)
+            
+            #Fill empty pixels of the cutout using interpolation + a noise image
+            if mcal_config['custom']['interp_bad_pixels']: 
+                o = preprocess._fill_empty_pix(o, rng, mcal_config)
+                
+            #finally take uberseg weight map and apply it to cutout
+            o = preprocess._apply_uberseg(o, o_tmp, mcal_config) 
+            
+            
+            ##########################################################################
+            
             o.meta['id'] = ind
             o[0].meta['Tsky'] = 1
             o[0].meta['magzp_ref']   = MAGZP_REF
 #             o[0][0].meta['orig_col'] = cat['orig_col'][ind, 0]
 #             o[0][0].meta['orig_row'] = cat['orig_row'][ind, 0]
-
-            if mcal_config['custom']['goodfrac']:
-                #put all the good_fraction numbers into one list
-                #one entry per cutout (so all bands are combined here)
-                good_frac = []
-                weight    = []
-                for _one in o:
-                    for _two in _one:
-                        good_frac.append(_two.meta['good_frac'])
-                        weight.append(_two.meta['weight'])
                     
             nband = len(o)
             mcal = MetacalFitter(mcal_config, nband, rng)
@@ -129,7 +162,12 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
                 if tmp is not None:
                     dt = tmp.dtype.fields
                     dt = [(i, dt[i][0]) for i in dt]
-
+                    
+                    #Add custom quantities for badfrac
+                    dt += [('badfrac', '>f8')]
+                    
+                    dt += [('Ncutouts_raw', '>i8', (len(o),))]
+                    
                     #Add custom quantities for focal plane coords.
                     #Has shape (N_bands, N_cutouts)
                     dt += [('expnum', '>i8', (len(o), mcal_config['custom']['Nexp_max']))]
@@ -141,6 +179,13 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
 
                     for i in tmp.dtype.names:
                         res[i] = tmp[i]
+                        
+                    #Store number of cutouts in each band BEFORE we subsample
+                    for i in range(len(o)):
+                        res['Ncutouts_raw'][0, i] = Ncutouts_per_band[i]
+                    
+                    #Store mean bad fraction of this image to use in making cuts
+                    res['badfrac'] = badfrac
                         
                     #Hacking to get coadd position in results
                     #(Mcal would just write first cutout position here by default,
@@ -171,10 +216,6 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
                 res = None
 
             if res is not None:
-                if mcal_config['custom']['goodfrac']:
-                    res['good_frac'] = np.average(good_frac, weights = weight) #store mean good_fraction per object
-                else:
-                    res['good_frac'] = 1 #Else, we're assuming image is "perfect" (completely unmasked) == 1
                 data.append(res)
 
         if len(data) > 0:
