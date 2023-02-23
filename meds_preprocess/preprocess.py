@@ -93,71 +93,6 @@ def _add_zeroweights_mask(mbobs, mcal_config):
         _mbobs.append(_ol)
     return _mbobs
 
-def _strip_10percent_masked(mbobs, mcal_config):
-    _mbobs = MultiBandObsList()
-    _mbobs.update_meta_data(mbobs.meta)
-    
-    #Loop over different band observations (r, i, z)
-    for ol in mbobs:
-        _ol = ObsList()
-        _ol.update_meta_data(ol.meta)
-        
-        #Loop over different exposures/cutouts in each band
-        for i in range(len(ol)):
-            
-            msk = ol[i].bmask.astype(bool) #Mask where TRUE means bad pixel
-            
-            if np.average(msk) >= mcal_config['custom']['maxbadfrac']:
-                continue
-            
-            _ol.append(ol[i])
-        _mbobs.append(_ol)
-    return _mbobs
-
-def _get_masked_frac(mbobs, mcal_config, coadd_wcs_rband):
-    
-    gauss = galsim.Gaussian(fwhm = 2) #Fixed aperture gauss weights for image. 2arcsec FWMH suggested by Matt
-   
-    #Quantities to make mask coadd
-    mask_coadd_sum  = 0
-    mask_weight_sum = 0
-    
-    #Loop over different band observations (r, i, z)
-    for ol in mbobs:
-        
-        #Loop over different exposures/cutouts in each band
-        for i in range(len(ol)):
-            
-            msk = ol[i].weight == 0 #ol[i].bmask.astype(bool) #Mask where TRUE means bad pixel
-            
-            if np.sum(np.invert(msk)) == 0: continue #If no good pixel, then skip this loop
-            
-            wgt = np.median(ol[i].weight[np.invert(msk)]) #Median weight used to do coadd of mask
-            
-            mask_coadd_sum  += msk*wgt
-            mask_weight_sum += wgt
-    
-    #If all image is masked completely
-    if (mask_weight_sum == 0) & np.all(mask_coadd_sum == 0):
-
-        mbobs.meta['badfrac'] = 1 #All images are masked
-    
-    else:
-        mask_coadd = mask_coadd_sum/mask_weight_sum
-
-        #Create gaussian weights image (as array)
-        #We use the r-band coadd wcs to make the gaussian weight image. DHAYAA: FEELS LIKE THIS COULD BE WRONG THING TO DO :P
-        gauss_wgt = gauss.drawImage(nx = mask_coadd.shape[0], ny = mask_coadd.shape[1], wcs = coadd_wcs_rband, method = 'real_space').array 
-
-        #msk is nonzero for bad pixs.
-        badfrac   = np.average(mask_coadd, weights = gauss_wgt) #Fraction of missing values
-
-        #Save fraction of bad pix. Will use later to remove
-        #problematic objects directly from metacal catalog
-        mbobs.meta['badfrac'] = badfrac
-    
-    return mbobs
-
 def _symmetrize_mask(mbobs, mcal_config):
     
     _mbobs = MultiBandObsList()
@@ -191,8 +126,7 @@ def _symmetrize_weights(mbobs, mcal_config):
         #Loop over different exposures/cutouts in each band
         for i in range(len(ol)):
             
-            new_weights = np.where((ol[i].weight <= 0) | (np.rot90(ol[i].weight) <= 0), 0, ol[i].weight)
-            
+            new_weights  = np.where((ol[i].weight <= 0) | (np.rot90(ol[i].weight) <= 0), 0, ol[i].weight)
             if np.sum(new_weights != 0) == 0: continue #Check if entire image is masked. Skip if yes.
                 
             ol[i].weight = new_weights
@@ -215,13 +149,67 @@ def _set_zero_weights(mbobs, mcal_config):
         for i in range(len(ol)):
                         
             #Set weights=0 whenever bmask is set
-            wgt = ol[i].weight.copy()
-            wgt[ol[i].bmask != 0] = 0.
-            ol[i].weight = wgt
+            new_weights  = np.where(ol[i].bmask != 0, 0, ol[i].weight)
+            if np.sum(new_weights != 0) == 0: continue #Check if entire image is masked. Skip if yes.
+                
+            ol[i].weight = new_weights
             
             _ol.append(ol[i])
         _mbobs.append(_ol)
     return _mbobs
+
+
+def _get_masked_frac(mbobs, mcal_config, coadd_wcs_rband):
+    
+    gauss = galsim.Gaussian(fwhm = 2) #Fixed aperture gauss weights for image. 2arcsec FWMH suggested by Matt
+   
+    #Image that all interpolated images are rewritten onto
+    image   = galsim.ImageD(ncol = mbobs[0][0].weight.shape[0], 
+                            nrow = mbobs[0][0].weight.shape[1], 
+                            wcs = coadd_wcs_rband)
+    
+    wgt_sum = 0
+    msk_sum = 0
+    Nobs    = 0
+    
+    
+    #Loop over different band observations (r, i, z)
+    for ol in mbobs:
+        
+        #Loop over different exposures/cutouts in each band
+        for i in range(len(ol)):
+            
+            msk = ol[i].weight == 0 #Mask where TRUE means bad pixel
+            
+            wgt = np.median(ol[i].weight[np.invert(msk)]) #Median weight used to do coadd of mask
+            
+            #Make interpolated galsim object to redraw image
+            msk = galsim.InterpolatedImage(galsim.ImageD(ol[i].weight),
+                                           wcs = ol[i].jacobian.get_galsim_wcs(),
+                                           gsparams = None,
+                                           x_interpolant='lanczos15')
+
+            new_msk  = msk.drawImage(image = image, method = 'no_pixel').array #interpolated image
+            msk_sum += new_msk*wgt
+            wgt_sum += wgt
+
+            Nobs += 1
+    
+    mask_coadd = msk_sum/wgt_sum
+
+    #Create gaussian weights image (as array)
+    #We use the r-band coadd wcs to make the gaussian weight image. DHAYAA: FEELS LIKE THIS COULD BE WRONG THING TO DO :P
+    gauss_wgt = gauss.drawImage(nx = mask_coadd.shape[0], ny = mask_coadd.shape[1], wcs = coadd_wcs_rband, method = 'real_space').array 
+
+    #weight is zero for bad pixs.
+    badfrac   = np.average(mask_coadd, weights = gauss_wgt) #Fraction of usable values
+
+    #Save fraction of bad pix. Will use later to remove
+    #problematic objects directly from metacal catalog
+    mbobs.meta['badfrac'] = badfrac
+    
+    return mbobs
+
 
 def _add_uberseg(mbobs, mbobs_with_uberseg, mcal_config):
     
@@ -234,7 +222,6 @@ def _add_uberseg(mbobs, mbobs_with_uberseg, mcal_config):
     locator = {}
     for i, ol in enumerate(mbobs_with_uberseg):
         for j, o in enumerate(ol):
-#             print(j, ol, ol.meta)
             locator[o.meta['file_path']] = (i, j)
     
     #Loop over different band observations (r, i, z)
@@ -257,6 +244,7 @@ def _add_uberseg(mbobs, mbobs_with_uberseg, mcal_config):
             _ol.append(ol[i])
         _mbobs.append(_ol)
     return _mbobs
+
 
 def _apply_uberseg(mbobs, mcal_config):
     

@@ -90,6 +90,10 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
             if mcal_config['custom']['Nexp_max'] > 0: 
                 o = preprocess._strip_Nexposures(o, np.random.RandomState(seed=seed), mcal_config)
              
+            #Zero-out weights for bmask != 0
+            #from now on weights contains the bmask in it
+            o = preprocess._set_zero_weights(o, mcal_config)
+            
             #Add 180deg Symmetry of weights (NOT UBERSEG)
             mcal_config['custom']['symmetrize_weights'] = mcal_config['custom']['symmetrize_mask'] #Monkeypatch for now. FIX LATER
             if mcal_config['custom']['symmetrize_weights']: 
