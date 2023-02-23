@@ -170,8 +170,6 @@ def _get_masked_frac(mbobs, mcal_config, coadd_wcs_rband):
     
     wgt_sum = 0
     msk_sum = 0
-    Nobs    = 0
-    
     
     #Loop over different band observations (r, i, z)
     for ol in mbobs:
@@ -183,23 +181,28 @@ def _get_masked_frac(mbobs, mcal_config, coadd_wcs_rband):
             
             wgt = np.median(ol[i].weight[np.invert(msk)]) #Median weight used to do coadd of mask
             
-            #Make interpolated galsim object to redraw image
-            msk = galsim.InterpolatedImage(galsim.ImageD(ol[i].weight),
-                                           wcs = ol[i].jacobian.get_galsim_wcs(),
-                                           gsparams = None,
-                                           x_interpolant='lanczos15')
+            #If unmasked image, then no need to interpolate, it's always 0
+            if np.sum(msk) == 0:
+                msk_sum += np.zeros_like(msk)*wgt
+                wgt_sum += wgt
+                
+            else:
+                #Make interpolated galsim object to redraw image
+                msk = galsim.InterpolatedImage(galsim.ImageD(msk),
+                                               wcs = ol[i].jacobian.get_galsim_wcs(),
+                                               gsparams = None,
+                                               x_interpolant='lanczos15')
 
-            new_msk  = msk.drawImage(image = image, method = 'no_pixel').array #interpolated image
-            msk_sum += new_msk*wgt
-            wgt_sum += wgt
-
-            Nobs += 1
+                new_msk  = msk.drawImage(image = image, method = 'no_pixel').array #interpolated image
+                
+                msk_sum += new_msk*wgt
+                wgt_sum += wgt
     
+    #Do the coadd of masks from all bands, cutouts
     mask_coadd = msk_sum/wgt_sum
 
     #Create gaussian weights image (as array)
-    #We use the r-band coadd wcs to make the gaussian weight image. DHAYAA: FEELS LIKE THIS COULD BE WRONG THING TO DO :P
-    gauss_wgt = gauss.drawImage(nx = mask_coadd.shape[0], ny = mask_coadd.shape[1], wcs = coadd_wcs_rband, method = 'real_space').array 
+    gauss_wgt = gauss.drawImage(image = image, method = 'real_space').array 
 
     #weight is zero for bad pixs.
     badfrac   = np.average(mask_coadd, weights = gauss_wgt) #Fraction of usable values
