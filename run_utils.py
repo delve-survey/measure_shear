@@ -73,12 +73,11 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
             o = preprocess._strip_coadd(o, mcal_config) #Remove coadd since it isnt used in fitting
             o = preprocess._strip_zero_flux(o, mcal_config) #Remove any obs with zero flux
             
-            #Check if we are missing cutouts in any band (we usually will for DECADE data)
-            skip_me = False
-            for ol in o:
-                if len(ol) == 0: skip_me = True
-            if skip_me: continue
-            
+            #Check if missing any bands. Happens due to observation
+            #Do this once at start just to prevent computation later on
+            if _check_band_coverage(o): continue
+                
+                
             #Now load uberseg version and add uberseg image 
             #to the observation as a property
             o_tmp = mbmeds.get_mbobs(ind, weight_type='uberseg')
@@ -99,6 +98,9 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
             if mcal_config['custom']['symmetrize_weights']: 
                 o = preprocess._symmetrize_weights(o, mcal_config)             
             
+            #Check again if missing any bands. 
+            #Happens due to weights symmetry, uberseg, or adding bmask
+            if _check_band_coverage(o): continue
             
             #gauss-weighted fraction of bad pixels
             o = preprocess._get_masked_frac(o, mcal_config, coadd_wcs_rband)

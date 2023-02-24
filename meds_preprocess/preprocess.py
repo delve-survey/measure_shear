@@ -158,7 +158,15 @@ def _set_zero_weights(mbobs, mcal_config):
         _mbobs.append(_ol)
     return _mbobs
 
-
+def _check_band_coverage(mbobs):
+    
+    #Check if we are missing cutouts in any band
+    skip_me = False
+    for ol in mbobs:
+        if len(ol) == 0: skip_me = True
+    
+    return skip_me
+    
 def _get_masked_frac(mbobs, mcal_config, coadd_wcs_rband):
     
     gauss = galsim.Gaussian(fwhm = 2) #Fixed aperture gauss weights for image. 2arcsec FWMH suggested by Matt
