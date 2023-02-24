@@ -75,7 +75,7 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
             
             #Check if missing any bands. Happens due to observation
             #Do this once at start just to prevent computation later on
-            if _check_band_coverage(o): continue
+            if preprocess._check_band_coverage(o): continue
                 
                 
             #Now load uberseg version and add uberseg image 
@@ -100,7 +100,7 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
             
             #Check again if missing any bands. 
             #Happens due to weights symmetry, uberseg, or adding bmask
-            if _check_band_coverage(o): continue
+            if preprocess._check_band_coverage(o): continue
             
             #gauss-weighted fraction of bad pixels
             o = preprocess._get_masked_frac(o, mcal_config, coadd_wcs_rband)
