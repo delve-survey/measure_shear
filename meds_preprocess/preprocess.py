@@ -191,9 +191,10 @@ def _get_masked_frac(mbobs, mcal_config, coadd_wcs_rband):
                 msk = galsim.InterpolatedImage(galsim.ImageD(msk),
                                                wcs = ol[i].jacobian.get_galsim_wcs(),
                                                gsparams = None,
-                                               x_interpolant='lanczos15')
+                                               normalization = 'sb',
+                                               x_interpolant='quintic')
 
-                new_msk  = msk.drawImage(image = image, method = 'no_pixel').array #interpolated image
+                new_msk  = msk.drawImage(image = image, method = 'sb').array #interpolated image
                 
                 msk_sum += new_msk*wgt
                 wgt_sum += wgt
