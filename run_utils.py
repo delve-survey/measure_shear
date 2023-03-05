@@ -99,7 +99,8 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
                 o = preprocess._symmetrize_weights(o, mcal_config)             
             
             #Check again if missing any bands. 
-            #Happens due to weights symmetry, uberseg, or adding bmask
+            #Happens due to weights symmetry or adding bmask
+            #Have to check this since masked frac fails if we miss a band
             if preprocess._check_band_coverage(o): continue
             
             #gauss-weighted fraction of bad pixels
@@ -114,6 +115,10 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
                 
             #finally take uberseg weight map and apply it to cutout
             o = preprocess._apply_uberseg(o, mcal_config) 
+
+
+            #Check band coverage again (in case uberseg removes a full band for an object)
+            if preprocess._check_band_coverage(o): continue
             
             
             ##########################################################################
