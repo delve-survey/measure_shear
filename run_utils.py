@@ -115,10 +115,6 @@ def _run_mcal_one_chunk(meds_files, start, end, seed, mcal_config):
                 
             #finally take uberseg weight map and apply it to cutout
             o = preprocess._apply_uberseg(o, mcal_config) 
-
-
-            #Check band coverage again (in case uberseg removes a full band for an object)
-            if preprocess._check_band_coverage(o): continue
             
             
             ##########################################################################
